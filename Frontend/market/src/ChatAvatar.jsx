@@ -3,73 +3,109 @@ import axios from "axios";
 
 function ChatAvatar() {
   const [message, setMessage] = useState("");
-  const [messages, setMessages] = useState([]); // chat history
+  const [messages, setMessages] = useState([]);
   const [loading, setLoading] = useState(false);
   const [open, setOpen] = useState(false);
 
   // Drag position
   const [position, setPosition] = useState({ x: 30, y: 30 });
-  const dragRef = useRef(null);
   const offsetRef = useRef({ x: 0, y: 0 });
+  const isDragging = useRef(false);
 
-  const API_URL = "http://localhost:5050"; // Change to your backend URL if needed
+  const chatEndRef = useRef(null);
 
-  // Load chat history from backend on mount
+  // ✅ Use environment variable instead of hardcoding
+  const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5050";
+
+  /* ---------------- Load Chat History ---------------- */
   useEffect(() => {
     const fetchHistory = async () => {
       try {
         const res = await axios.get(`${API_URL}/api/chat/history`);
         setMessages(res.data || []);
       } catch (err) {
-        console.error("Error fetching chat history:", err);
+        console.error("History fetch error:", err);
       }
     };
+
     fetchHistory();
   }, []);
 
-  // Send message to AI and save
+  /* ---------------- Auto Scroll ---------------- */
+  useEffect(() => {
+    chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages]);
+
+  /* ---------------- Send Message ---------------- */
   const sendMessage = async () => {
-    if (!message.trim()) return alert("Please enter a message");
+    if (!message.trim() || loading) return;
+
+    const userText = message;
+    setMessage("");
     setLoading(true);
 
+    // Optimistic UI
+    setMessages((prev) => [...prev, { user: userText, ai: "..." }]);
+
     try {
-      // 1️⃣ Send message to AI endpoint
       const aiRes = await axios.post(`${API_URL}/api/generate-content`, {
-        prompt: message,
+        prompt: userText,
       });
+
       const aiText = aiRes.data.content || "No response from AI";
 
-      // 2️⃣ Save chat to backend
       await axios.post(`${API_URL}/api/chat/save-chat`, {
-        userMessage: message,
+        userMessage: userText,
         aiResponse: aiText,
       });
 
-      // 3️⃣ Update local chat state
-      setMessages((prev) => [...prev, { user: message, ai: aiText }]);
-      setMessage(""); // Clear input
+      // Replace last loading message
+      setMessages((prev) => {
+        const updated = [...prev];
+        updated[updated.length - 1] = { user: userText, ai: aiText };
+        return updated;
+      });
+
     } catch (err) {
-      console.error("Error sending message:", err);
-      alert("Something went wrong while sending your message");
+      console.error("Send message error:", err);
+
+      setMessages((prev) => {
+        const updated = [...prev];
+        updated[updated.length - 1] = {
+          user: userText,
+          ai: "⚠️ Error getting AI response",
+        };
+        return updated;
+      });
     } finally {
       setLoading(false);
     }
   };
 
-  // Drag handlers
+  /* ---------------- Enter Key ---------------- */
+  const handleKeyPress = (e) => {
+    if (e.key === "Enter") sendMessage();
+  };
+
+  /* ---------------- Drag Handlers ---------------- */
   const onMouseDown = (e) => {
+    isDragging.current = false;
+
     offsetRef.current = {
       x: e.clientX - position.x,
-      y: e.clientY - position.y,
+      y: window.innerHeight - e.clientY - position.y,
     };
+
     document.addEventListener("mousemove", onMouseMove);
     document.addEventListener("mouseup", onMouseUp);
   };
 
   const onMouseMove = (e) => {
+    isDragging.current = true;
+
     setPosition({
       x: e.clientX - offsetRef.current.x,
-      y: e.clientY - offsetRef.current.y,
+      y: window.innerHeight - e.clientY - offsetRef.current.y,
     });
   };
 
@@ -78,7 +114,14 @@ function ChatAvatar() {
     document.removeEventListener("mouseup", onMouseUp);
   };
 
-  /* ---------- STYLES ---------- */
+  /* ---------------- Toggle Chat ---------------- */
+  const handleToggle = () => {
+    if (!isDragging.current) {
+      setOpen((prev) => !prev);
+    }
+  };
+
+  /* ---------------- Styles ---------------- */
   const buttonStyle = {
     position: "fixed",
     left: position.x,
@@ -99,8 +142,8 @@ function ChatAvatar() {
     position: "fixed",
     left: position.x,
     bottom: position.y + 75,
-    width: "300px",
-    maxHeight: "400px",
+    width: "320px",
+    maxHeight: "420px",
     background: "#fff",
     borderRadius: "16px",
     padding: "14px",
@@ -108,53 +151,15 @@ function ChatAvatar() {
     zIndex: 1000,
     display: "flex",
     flexDirection: "column",
-    animation: "fadeIn 0.3s ease",
-  };
-
-  const inputStyle = {
-    width: "100%",
-    padding: "8px",
-    borderRadius: "8px",
-    border: "1px solid #d1d5db",
-    marginBottom: "8px",
-  };
-
-  const sendBtnStyle = {
-    width: "100%",
-    padding: "10px",
-    borderRadius: "8px",
-    border: "none",
-    background: loading ? "#9ca3af" : "#2563eb",
-    color: "#fff",
-    fontWeight: "600",
-    cursor: loading ? "not-allowed" : "pointer",
-    marginBottom: "8px",
-  };
-
-  const chatHistoryStyle = {
-    flex: 1,
-    overflowY: "auto",
-    marginBottom: "8px",
-    fontSize: "14px",
-  };
-
-  const userMessageStyle = { textAlign: "right", margin: "4px 0", fontWeight: "500" };
-  const aiMessageStyle = {
-    textAlign: "left",
-    margin: "4px 0",
-    background: "#f3f4f6",
-    padding: "6px 8px",
-    borderRadius: "6px",
   };
 
   return (
     <>
-      {/* Chat Toggle Button */}
+      {/* Avatar Button */}
       <button
-        ref={dragRef}
         style={buttonStyle}
         onMouseDown={onMouseDown}
-        onClick={() => setOpen(!open)}
+        onClick={handleToggle}
       >
         🤖
       </button>
@@ -162,26 +167,60 @@ function ChatAvatar() {
       {/* Chat Box */}
       {open && (
         <div style={chatStyle}>
-          <h4 style={{ textAlign: "center", marginBottom: "8px" }}>AI Assistant</h4>
+          <h4 style={{ textAlign: "center" }}>AI Assistant</h4>
 
-          <div style={chatHistoryStyle}>
+          {/* Chat History */}
+          <div style={{ flex: 1, overflowY: "auto", fontSize: "14px" }}>
             {messages.map((m, idx) => (
               <div key={idx}>
-                <div style={userMessageStyle}>{m.user}</div>
-                <div style={aiMessageStyle}>{m.ai}</div>
+                <div style={{ textAlign: "right", margin: "4px 0" }}>
+                  <b>{m.user}</b>
+                </div>
+                <div
+                  style={{
+                    textAlign: "left",
+                    background: "#f3f4f6",
+                    padding: "6px 8px",
+                    borderRadius: "6px",
+                    marginBottom: "4px",
+                  }}
+                >
+                  {m.ai}
+                </div>
               </div>
             ))}
+            <div ref={chatEndRef} />
           </div>
 
+          {/* Input */}
           <input
             type="text"
             placeholder="Ask something..."
             value={message}
             onChange={(e) => setMessage(e.target.value)}
-            style={inputStyle}
+            onKeyDown={handleKeyPress}
+            style={{
+              padding: "8px",
+              borderRadius: "8px",
+              border: "1px solid #ccc",
+              marginBottom: "8px",
+            }}
           />
 
-          <button style={sendBtnStyle} disabled={loading} onClick={sendMessage}>
+          {/* Send Button */}
+          <button
+            disabled={loading}
+            onClick={sendMessage}
+            style={{
+              padding: "10px",
+              borderRadius: "8px",
+              border: "none",
+              background: loading ? "#9ca3af" : "#2563eb",
+              color: "#fff",
+              fontWeight: "600",
+              cursor: "pointer",
+            }}
+          >
             {loading ? "Thinking..." : "Send"}
           </button>
         </div>

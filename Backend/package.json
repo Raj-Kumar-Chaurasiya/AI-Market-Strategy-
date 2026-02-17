@@ -1,22 +1,26 @@
 {
   "name": "backend",
   "version": "1.0.0",
-  "description": "AI powered backend with authentication and OpenAI integration",
+  "description": "AI powered backend with authentication and Gemini AI integration",
+  "type": "module",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "dev": "node server.js"
+    "dev": "nodemon server.js"
   },
-  "author": "raj",
+  "author": "Raj Kumar Chaurasiya",
   "license": "ISC",
   "dependencies": {
+    "@google/generative-ai": "^0.24.1",
     "bcryptjs": "^2.4.3",
     "body-parser": "^2.2.1",
     "cors": "^2.8.6",
     "dotenv": "^17.2.3",
     "express": "^4.22.1",
     "jsonwebtoken": "^9.0.3",
-    "mongoose": "^8.22.0",
-    "openai": "^6.14.0"
+    "mongoose": "^8.22.0"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.0"
   }
 }
